@@ -4,7 +4,6 @@ import { Navigate, Route, Routes, useLocation } from 'react-router'
 import { useAuth } from '@/lib/auth'
 import { HomePage } from '@/pages/home-page'
 import { LoginPage } from '@/pages/login-page'
-import { ProfilePage } from '@/pages/profile-page'
 import { SignupPage } from '@/pages/signup-page'
 
 /** Sends signed-out visitors to the login page, remembering where they were going. */
@@ -36,15 +35,7 @@ export default function App() {
             <HomePage />
           </RequireAuth>
         }
-      />
-      <Route
-        path="/profile"
-        element={
-          <RequireAuth>
-            <ProfilePage />
-          </RequireAuth>
-        }
-      />
+      
       <Route
         path="/login"
         element={
