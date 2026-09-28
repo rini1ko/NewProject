@@ -35,7 +35,7 @@ export default function App() {
             <HomePage />
           </RequireAuth>
         }
-      
+      />
       <Route
         path="/login"
         element={
