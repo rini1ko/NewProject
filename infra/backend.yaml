@@ -103,6 +103,30 @@ Resources:
         - Key: PROJECT_NAME
           Value: !Ref ProjectName
 
+  # Explicit route table (instead of the VPC's main one) so the reports stack can attach the
+  # S3 gateway endpoint to it. Still no internet route.
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-private
+        - Key: PROJECT_NAME
+          Value: !Ref ProjectName
+
+  PrivateSubnetARouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetBRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
   # --------------------------------------------------------- Security groups
   FunctionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -293,3 +317,14 @@ Outputs:
     Value: !GetAtt Database.Endpoint.Address
   LogGroup:
     Value: !Ref LogGroup
+  ImageUri:
+    Description: Image the function runs; the reports builder reuses it
+    Value: !Ref ImageUri
+  VpcId:
+    Value: !Ref Vpc
+  PrivateSubnetIds:
+    Value: !Join [",", [!Ref PrivateSubnetA, !Ref PrivateSubnetB]]
+  PrivateRouteTableId:
+    Value: !Ref PrivateRouteTable
+  FunctionSecurityGroupId:
+    Value: !Ref FunctionSecurityGroup
