@@ -12,6 +12,7 @@ from sqlalchemy import (
     Uuid,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -80,3 +81,20 @@ class Meeting(Base):
         order_by=Participant.name,
         passive_deletes=True,
     )
+
+
+class MeetingAgenda(Base):
+    """The agenda of a meeting (at most one). `ai_suggestion` is what the LLM parser proposed
+    (model, prompt version, parsed agenda), kept next to what the person finally saved: the
+    difference between the two is the quality signal of the feature."""
+
+    __tablename__ = "meeting_agendas"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    meeting_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), unique=True
+    )
+    items: Mapped[list] = mapped_column(JSONB, default=list)
+    action_items: Mapped[list] = mapped_column(JSONB, default=list)
+    ai_suggestion: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -1,14 +1,17 @@
+import json
 import uuid
-from datetime import UTC, datetime
-from typing import Annotated
+from datetime import UTC, date, datetime
+from typing import Annotated, Any
 
 from pydantic import (
     AfterValidator,
     BaseModel,
     ConfigDict,
     EmailStr,
+    Field,
     StringConstraints,
     field_serializer,
+    field_validator,
     model_validator,
 )
 
@@ -77,3 +80,48 @@ class MeetingRead(BaseModel):
     @field_serializer("starts_at", "ends_at", "created_at")
     def to_utc(self, value: datetime) -> str:
         return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+class AgendaItem(BaseModel):
+    topic: Annotated[NonEmptyStr, StringConstraints(max_length=300)]
+    owner: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None
+    minutes: int | None = Field(default=None, ge=1, le=480)
+
+
+class ActionItem(BaseModel):
+    task: Annotated[NonEmptyStr, StringConstraints(max_length=500)]
+    owner: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None
+    due: date | None = None
+
+
+class AiSuggestion(BaseModel):
+    """What the parser suggested, sent back with the save so it can be compared with the result."""
+
+    model: Annotated[str, StringConstraints(max_length=100)]
+    prompt_version: Annotated[str, StringConstraints(max_length=50)]
+    agenda: dict[str, Any]
+
+    @field_validator("agenda")
+    @classmethod
+    def small_enough(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(json.dumps(value)) > 50_000:
+            raise ValueError("suggestion is too large")
+        return value
+
+
+class AgendaWrite(BaseModel):
+    items: list[AgendaItem] = Field(max_length=100)
+    action_items: list[ActionItem] = Field(default=[], max_length=100)
+    ai_suggestion: AiSuggestion | None = None
+
+
+class AgendaRead(BaseModel):
+    items: list[AgendaItem]
+    action_items: list[ActionItem]
+    ai_suggestion: dict[str, Any] | None
+    updated_at: datetime | None
+
+    @field_serializer("updated_at")
+    def to_utc(self, value: datetime | None) -> str | None:
+        return value.astimezone(UTC).isoformat().replace("+00:00", "Z") if value else None
+

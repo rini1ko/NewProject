@@ -7,7 +7,8 @@ s ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help env build up down restart logs ps migrate migration seed psql test lint format \
-	dev-backend dev-frontend install clean deploy deploy-auth deploy-backend deploy-frontend destroy-auth destroy-backend destroy-frontend add-domain remove-domain infra-lint deploy-reports report-now
+	dev-backend dev-frontend install clean deploy deploy-auth deploy-backend deploy-frontend destroy-auth destroy-backend destroy-frontend add-domain remove-domain infra-lint deploy-reports report-now \
+	llm-hello parse deploy-ai destroy-ai
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(firstword $(MAKEFILE_LIST)) | \
@@ -81,7 +82,9 @@ AWS_ENV := AWS_ACCESS_KEY_ID="$(AWS_ACCESS_KEY_ID)" AWS_SECRET_ACCESS_KEY="$(AWS
 	LAMBDA_MEMORY="$(LAMBDA_MEMORY)" DOMAIN_NAME="$(DOMAIN_NAME)" HOSTED_ZONE_ID="$(HOSTED_ZONE_ID)" \
 	GOOGLE_CLIENT_ID="$(GOOGLE_CLIENT_ID)" GOOGLE_CLIENT_SECRET="$(GOOGLE_CLIENT_SECRET)" \
 	REPORT_EMAIL="$(REPORT_EMAIL)" REPORT_SCHEDULE_TARGET="$(REPORT_SCHEDULE_TARGET)" \
-	REPORT_SCHEDULE_EXPRESSION="$(REPORT_SCHEDULE_EXPRESSION)" WEEK="$(WEEK)"
+	REPORT_SCHEDULE_EXPRESSION="$(REPORT_SCHEDULE_EXPRESSION)" WEEK="$(WEEK)" \
+	PARSER_MODEL="$(or $(PARSER_MODEL),anthropic.claude-opus-5-5)" PARSER_EFFORT="$(or $(PARSER_EFFORT),low)" \
+	PARSER_API="$(or $(PARSER_API),messages)" BUDGET_EMAIL="$(BUDGET_EMAIL)"
 
 deploy: deploy-backend deploy-frontend ## Deploy the whole app to AWS (after make deploy-auth)
 
@@ -90,6 +93,26 @@ deploy-reports: env ## Deploy the weekly report: S3, SQS, Scheduler, builder + m
 
 report-now: env ## Build a report now: make report-now WEEK=2026-W39 (default: previous week)
 	@$(AWS_ENV) ./infra/report-now.sh
+
+# Laptop runs of the parser: same credentials, but unset values are not exported (an empty
+# AWS_SESSION_TOKEN would break signing) and the model has a default.
+LLM_ENV := AWS_ACCESS_KEY_ID="$(AWS_ACCESS_KEY_ID)" AWS_SECRET_ACCESS_KEY="$(AWS_SECRET_ACCESS_KEY)" \
+	$(if $(AWS_SESSION_TOKEN),AWS_SESSION_TOKEN="$(AWS_SESSION_TOKEN)") \
+	PARSER_MODEL="$(or $(PARSER_MODEL),anthropic.claude-opus-5-5)" PARSER_EFFORT="$(or $(PARSER_EFFORT),low)" \
+	PARSER_API="$(or $(PARSER_API),messages)"
+
+deploy-ai: env ## Deploy "Paste an agenda": parser Lambda + function URL + $5 budget alarm (after deploy-backend)
+	@$(AWS_ENV) ./infra/deploy-ai.sh
+
+destroy-ai: env ## Delete the parser stack
+	@$(AWS_ENV) ./infra/destroy-ai.sh
+
+llm-hello: env ## First call to Claude on Bedrock from your laptop (uses AWS_* and PARSER_MODEL from .env)
+	@cd backend && $(LLM_ENV) uv run python -m app.ai.hello
+
+parse: env ## Run the agenda parser locally: make parse TEXT="Пн 10:00, синк ..."
+	@test -n "$(TEXT)" || (echo 'Usage: make parse TEXT="..."' && exit 1)
+	@cd backend && $(LLM_ENV) uv run python -m app.ai.agenda "$(TEXT)"
 
 deploy-auth: env ## Deploy Cognito (user pool + app client), print its settings and write them to .env
 	@$(AWS_ENV) ./infra/deploy-auth.sh
@@ -116,4 +139,4 @@ destroy-frontend: env ## Delete the S3 bucket, CloudFront distribution and domai
 	@$(AWS_ENV) ./infra/destroy-frontend.sh
 
 infra-lint: ## Lint the CloudFormation templates
-	uvx cfn-lint infra/*.yaml
+	uvx cfn-lint infra/*.yaml infra/*.yml

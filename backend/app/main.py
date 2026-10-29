@@ -5,7 +5,7 @@ from sqlalchemy import text
 from app.auth import get_current_user
 from app.config import settings
 from app.db import SessionDep
-from app.routers import me, meetings, participants
+from app.routers import agenda, me, meetings, participants
 
 app = FastAPI(
     title="Meetings API",
@@ -33,5 +33,6 @@ async def health(session: SessionDep) -> dict[str, str]:
 # Everything but /api/health needs a signed-in user; meetings are scoped to their owner.
 api.include_router(me.router)
 api.include_router(meetings.router)
+api.include_router(agenda.router)
 api.include_router(participants.router, dependencies=[Depends(get_current_user)])
 app.include_router(api)

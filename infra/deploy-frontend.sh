@@ -12,10 +12,14 @@ main() {
   stack_exists "$BACKEND_STACK" || { echo "Stack $BACKEND_STACK not found; run make deploy-backend first." >&2; exit 1; }
   require_auth_stack
   api_base_url="$(output "$BACKEND_STACK" ApiBaseUrl)"
+  # "Paste an agenda" calls the parser Lambda directly; empty (feature off) until make deploy-ai.
+  parser_url=""
+  if stack_exists "$AI_STACK"; then parser_url="$(output "$AI_STACK" ParseUrl)"; fi
 
-  echo "==> [1/6] Build the frontend (API: $api_base_url)"
+  echo "==> [1/6] Build the frontend (API: $api_base_url, parser: ${parser_url:-NOT SET})"
   (cd frontend && npm ci && \
     VITE_API_URL="$api_base_url" \
+    VITE_PARSER_URL="$parser_url" \
     COGNITO_USER_POOL_ID="$(output "$AUTH_STACK" UserPoolId)" \
     COGNITO_CLIENT_ID="$(output "$AUTH_STACK" UserPoolClientId)" \
     COGNITO_DOMAIN="$(output "$AUTH_STACK" Domain)" \

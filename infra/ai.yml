@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Meetings app - "Paste an agenda". One Lambda function (outside the VPC, no database) behind a
+  public function URL: it checks the Cognito token, calls Claude on Amazon Bedrock and returns a
+  validated JSON agenda. It never writes anything. Also a $5 monthly budget alarm.
+  Deployed after backend.yaml (reuses its container image).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: meetings
+    AllowedPattern: "[a-z][a-z0-9-]*"
+  ImageUri:
+    Type: String
+    Description: Backend image (output of the backend stack); the parser reuses it.
+  CognitoUserPoolId:
+    Type: String
+  CognitoClientId:
+    Type: String
+  CorsOrigins:
+    Type: CommaDelimitedList
+    Default: http://localhost:5173
+    Description: Sites allowed to call the parser (kept up to date by the infra scripts).
+  ParserModel:
+    Type: String
+    Default: anthropic.claude-opus-5-5
+    Description: Bedrock model ID. Try anthropic.claude-haiku-5-5 for ~40x lower cost.
+  ParserEffort:
+    Type: String
+    Default: low
+    AllowedValues: [low, medium, high]
+  ParserApi:
+    Type: String
+    Default: messages
+    AllowedValues: [messages, converse]
+    Description: >-
+      messages = Anthropic Messages API (bedrock-mantle). converse = Converse API (bedrock-runtime),
+      for accounts where the Messages API does not serve the model.
+  BedrockRegion:
+    Type: String
+    Default: us-east-1
+  BudgetEmail:
+    Type: String
+    Default: ""
+    Description: Gets an email at 80% and 100% of a $5 monthly AWS budget. Empty = no budget.
+
+Conditions:
+  HasBudgetEmail: !Not [!Equals [!Ref BudgetEmail, ""]]
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /${ProjectName}/ai-parser
+      RetentionInDays: 14
+      Tags:
+        - Key: PROJECT_NAME
+          Value: !Ref ProjectName
+
+  # Not in the VPC: it needs the internet (Bedrock, Cognito's keys) and never touches Aurora.
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: call-claude
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # "*" for now; narrowing it to one model is a discussion question.
+              - Effect: Allow
+                Action: bedrock-mantle:CreateInference
+                Resource: "*"
+              # Converse API (PARSER_API=converse); also covers inference profiles.
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: "*"
+      Tags:
+        - Key: PROJECT_NAME
+          Value: !Ref ProjectName
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-ai-parser
+      PackageType: Image
+      Code:
+        ImageUri: !Ref ImageUri
+      # Same image as the API; only the command differs. No migrations, no database.
+      ImageConfig:
+        Command: [uvicorn, app.ai.agenda_lambda:app, --host, 0.0.0.0, --port, "8000"]
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 30
+      Role: !GetAtt Role.Arn
+      LoggingConfig:
+        LogGroup: !Ref LogGroup
+      Environment:
+        Variables:
+          PARSER_MODEL: !Ref ParserModel
+          PARSER_EFFORT: !Ref ParserEffort
+          PARSER_API: !Ref ParserApi
+          BEDROCK_REGION: !Ref BedrockRegion
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          AWS_LWA_PORT: "8000"
+          AWS_LWA_READINESS_CHECK_PATH: /health
+      Tags:
+        - Key: PROJECT_NAME
+          Value: !Ref ProjectName
+
+  FunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt Function.Arn
+      AuthType: NONE   # the handler checks the Cognito token itself (every call costs money)
+      Cors:
+        AllowOrigins: !Ref CorsOrigins
+        AllowMethods: [POST]
+        AllowHeaders: [authorization, content-type]
+        MaxAge: 600
+
+  # A public function URL needs both permissions. (Function URLs and permissions have no tags.)
+  FunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  FunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  # Cheapest insurance in the course. Covers the whole account's spend in the month.
+  Budget:
+    Type: AWS::Budgets::Budget
+    Condition: HasBudgetEmail
+    Properties:
+      Budget:
+        BudgetName: !Sub ${ProjectName}-monthly-5-usd
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: 5, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref BudgetEmail }
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref BudgetEmail }
+
+Outputs:
+  ParseUrl:
+    Description: POST here with the Cognito ID token; the frontend is built against it
+    Value: !Sub "${FunctionUrl.FunctionUrl}parse"
+  FunctionName:
+    Value: !Ref Function
+  LogGroup:
+    Value: !Ref LogGroup

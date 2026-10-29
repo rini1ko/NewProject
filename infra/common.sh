@@ -11,6 +11,7 @@ ECR_STACK="$PROJECT_NAME-ecr"
 BACKEND_STACK="$PROJECT_NAME-backend"
 FRONTEND_STACK="$PROJECT_NAME-frontend"
 AUTH_STACK="$PROJECT_NAME-auth"
+AI_STACK="$PROJECT_NAME-ai"
 # CloudFront only accepts certificates from us-east-1.
 CERT_STACK="$PROJECT_NAME-certificate"
 CERT_REGION="us-east-1"
@@ -61,6 +62,16 @@ update_backend_cors() {
     --parameter-overrides "CorsOrigins=$origins" \
     --tags "${STACK_TAGS[@]}" \
     --no-fail-on-empty-changeset
+  # The agenda parser's function URL has its own CORS list.
+  if stack_exists "$AI_STACK"; then
+    aws cloudformation deploy \
+      --stack-name "$AI_STACK" \
+      --template-file infra/ai.yml \
+      --capabilities CAPABILITY_IAM \
+      --parameter-overrides "CorsOrigins=$origins" \
+      --tags "${STACK_TAGS[@]}" \
+      --no-fail-on-empty-changeset
+  fi
 }
 
 # app_urls: the origins the frontend runs on (local dev servers, CloudFront, custom domain);

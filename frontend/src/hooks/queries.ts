@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 
 export const meetingsKey = ['meetings'] as const
 export const participantsKey = ['participants'] as const
+export const agendaKey = (meetingId: string) => ['agenda', meetingId] as const
 
 export function useMeetings() {
   return useQuery({ queryKey: meetingsKey, queryFn: api.listMeetings })
@@ -42,5 +43,22 @@ export function useCreateParticipant() {
   return useMutation({
     mutationFn: api.createParticipant,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: participantsKey }),
+  })
+}
+
+export function useAgenda(meetingId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: agendaKey(meetingId ?? ''),
+    queryFn: () => api.getAgenda(meetingId as string),
+    enabled: enabled && meetingId !== null,
+  })
+}
+
+export function useSaveAgenda() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.saveAgenda,
+    onSuccess: (_agenda, variables) =>
+      queryClient.invalidateQueries({ queryKey: agendaKey(variables.meetingId) }),
   })
 }

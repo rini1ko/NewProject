@@ -1,6 +1,14 @@
-import { useRef } from 'react'
-import { ClockIcon, MapPinIcon, PencilIcon, Trash2Icon, UsersIcon } from 'lucide-react'
+import { useRef, useState } from 'react'
+import {
+  ClockIcon,
+  ListChecksIcon,
+  MapPinIcon,
+  PencilIcon,
+  Trash2Icon,
+  UsersIcon,
+} from 'lucide-react'
 
+import { AgendaDialog } from '@/components/agenda-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,8 +35,10 @@ type Props = {
 
 export function MeetingDetailsDialog({ meeting, open, onOpenChange, onEdit, onDelete }: Props) {
   const editButtonRef = useRef<HTMLButtonElement>(null)
+  const [agendaOpen, setAgendaOpen] = useState(false)
 
   return (
+    <>
     <Dialog open={open && meeting !== null} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-lg"
@@ -108,14 +118,26 @@ export function MeetingDetailsDialog({ meeting, open, onOpenChange, onEdit, onDe
                 <Trash2Icon />
                 Delete
               </Button>
-              <Button ref={editButtonRef} onClick={() => onEdit(meeting)}>
-                <PencilIcon />
-                Edit
-              </Button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button variant="outline" onClick={() => setAgendaOpen(true)}>
+                  <ListChecksIcon />
+                  Agenda
+                </Button>
+                <Button ref={editButtonRef} onClick={() => onEdit(meeting)}>
+                  <PencilIcon />
+                  Edit
+                </Button>
+              </div>
             </DialogFooter>
           </>
         )}
       </DialogContent>
     </Dialog>
+    <AgendaDialog
+      meeting={meeting}
+      open={open && agendaOpen}
+      onOpenChange={setAgendaOpen}
+    />
+    </>
   )
 }
