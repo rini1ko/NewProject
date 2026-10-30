@@ -1,0 +1,83 @@
+terraform -chdir=infra plan
+Running plan in HCP Terraform. Output will stream here. Pressing Ctrl-C
+will stop streaming the logs, but will not stop the plan running remotely.
+
+Preparing the remote plan...
+
+The remote workspace is configured to work with configuration at
+infra relative to the target repository.
+
+Terraform will upload the contents of the following directory,
+excluding files or directories as defined by a .terraformignore file
+at /mnt/c/Users/zaits/NewProject/.terraformignore (if it is present),
+in order to capture the filesystem context the remote workspace expects:
+    /mnt/c/Users/zaits/NewProject
+
+To view this run in a browser, visit:
+https://app.terraform.io/app/ooad-rini1ko/new-project-dev/runs/run-tSCcptNgqoQgBMvb
+
+Waiting for the plan to start...
+
+Terraform v1.17.1
+on linux_amd64
+
+Initializing plugins and modules...
+data.archive_file.mailer: Refreshing...
+data.archive_file.mailer: Refresh complete after 1s [id=bebc32b51e1ad491b004373d61a5f11d1d300e0b]
+aws_iam_role.mailer: Refreshing state... [id=new-project-reports-MailerRole-waUWEhNGG54Y]
+aws_cognito_user_pool.main: Refreshing state... [id=eu-central-1_3h0Y6iJZo]
+aws_iam_role.parser: Refreshing state... [id=new-project-ai-Role-SCOvE6emGSNR]
+data.aws_partition.current: Refreshing...
+data.aws_cloudformation_stack.backend: Refreshing...
+aws_cloudwatch_log_group.parser: Refreshing state... [id=/new-project/ai-parser]
+data.aws_caller_identity.current: Refreshing...
+data.aws_partition.current: Refresh complete after 0s [id=aws]
+aws_cloudwatch_log_group.builder: Refreshing state... [id=/new-project/reports-builder]
+data.aws_cloudformation_stack.frontend: Refreshing...
+aws_budgets_budget.monthly[0]: Refreshing state... [id=618687953719:new-project-monthly-5-usd]
+aws_cloudwatch_log_group.mailer: Refreshing state... [id=/new-project/reports-mailer]
+data.aws_caller_identity.current: Refresh complete after 0s [id=618687953719]
+data.aws_ssm_parameter.db_password: Refreshing...
+aws_sesv2_email_identity.sender: Refreshing state... [id=zaits.pn@ucu.edu.ua]
+aws_iam_role.builder: Refreshing state... [id=new-project-reports-BuilderRole-VNLsn5rUjY3w]
+aws_sqs_queue.requests_dlq: Refreshing state... [id=https://sqs.eu-central-1.amazonaws.com/618687953719/new-project-report-requests-dlq]
+aws_iam_role_policy.parser: Refreshing state... [id=new-project-ai-Role-SCOvE6emGSNR:call-claude]
+aws_iam_role_policy_attachment.builder_vpc: Refreshing state... [id=new-project-reports-BuilderRole-VNLsn5rUjY3w/arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole]
+aws_iam_role_policy_attachment.mailer_logs: Refreshing state... [id=new-project-reports-MailerRole-waUWEhNGG54Y/arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+data.aws_ssm_parameter.db_password: Refresh complete after 1s [id=/new-project/db-password]
+aws_iam_role.scheduler: Refreshing state... [id=new-project-reports-SchedulerRole-EsGK0KFmOBqB]
+data.aws_cloudformation_stack.frontend: Refresh complete after 1s [id=arn:aws:cloudformation:eu-central-1:618687953719:stack/new-project-frontend/5fb51190-bbdb-11f1-a042-02f117809005]
+aws_iam_role_policy_attachment.parser_logs: Refreshing state... [id=new-project-ai-Role-SCOvE6emGSNR/arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+data.aws_cloudformation_stack.backend: Refresh complete after 1s [id=arn:aws:cloudformation:eu-central-1:618687953719:stack/new-project-backend/906ce8f0-bbd9-11f1-b4b4-0689a45fff07]
+aws_lambda_function.mailer: Refreshing state... [id=new-project-reports-mailer]
+aws_s3_bucket.reports: Refreshing state... [id=new-project-reports-618687953719]
+aws_iam_role_policy.mailer: Refreshing state... [id=new-project-reports-MailerRole-waUWEhNGG54Y:reports-mailer]
+aws_vpc_endpoint.s3: Refreshing state... [id=vpce-0df0ff96e32475c99]
+aws_lambda_function.builder: Refreshing state... [id=new-project-reports-builder]
+aws_sqs_queue.requests: Refreshing state... [id=https://sqs.eu-central-1.amazonaws.com/618687953719/new-project-report-requests]
+aws_cognito_user_pool_domain.main: Refreshing state... [id=new-project-618687953719]
+aws_cognito_identity_provider.google[0]: Refreshing state... [id=eu-central-1_3h0Y6iJZo:Google]
+aws_iam_role_policy.builder: Refreshing state... [id=new-project-reports-BuilderRole-VNLsn5rUjY3w:reports-builder]
+aws_cognito_user_pool_client.web: Refreshing state... [id=5db4fo56ki9nv1am5ql81p1lo3]
+aws_scheduler_schedule.weekly: Refreshing state... [id=default/new-project-weekly-report]
+aws_lambda_event_source_mapping.builder_queue: Refreshing state... [id=6c233074-4641-4559-9bb2-fcc29a93ef38]
+aws_iam_role_policy.scheduler: Refreshing state... [id=new-project-reports-SchedulerRole-EsGK0KFmOBqB:start-report]
+aws_lambda_function.parser: Refreshing state... [id=new-project-ai-parser]
+aws_lambda_permission.parser_invoke: Refreshing state... [id=AllowPublicInvokeViaFunctionUrl]
+aws_lambda_function_url.parser: Refreshing state... [id=new-project-ai-parser]
+aws_lambda_permission.parser_url: Refreshing state... [id=AllowPublicFunctionUrl]
+aws_s3_bucket_public_access_block.reports: Refreshing state... [id=new-project-reports-618687953719]
+aws_s3_bucket_lifecycle_configuration.reports: Refreshing state... [id=new-project-reports-618687953719]
+aws_lambda_permission.mailer_from_s3: Refreshing state... [id=AllowReportsBucketInvoke]
+aws_s3_bucket_server_side_encryption_configuration.reports: Refreshing state... [id=new-project-reports-618687953719]
+aws_s3_bucket_notification.reports: Refreshing state... [id=new-project-reports-618687953719]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
