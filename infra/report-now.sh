@@ -12,8 +12,8 @@ main() {
     echo "WEEK must look like 2026-W39" >&2
     exit 1
   fi
-  queue_url="$(output "$PROJECT_NAME-reports" QueueUrl)"
-  [ -n "$queue_url" ] && [ "$queue_url" != "None" ] || { echo "Run make deploy-reports first." >&2; exit 1; }
+  queue_url="$(tf_output queue_url 2>/dev/null || true)"
+  [ -n "$queue_url" ] && [ "$queue_url" != "None" ] || { echo "Terraform has no queue_url output yet: apply the HCP Terraform workspace first." >&2; exit 1; }
 
   if [ -n "$week" ]; then body="{\"week\": \"$week\", \"source\": \"make\"}"
   else body='{"week": null, "source": "make"}'; fi

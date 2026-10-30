@@ -10,8 +10,10 @@ PROJECT_NAME="${PROJECT_NAME:-${APP_NAME:-meetings}}"
 ECR_STACK="$PROJECT_NAME-ecr"
 BACKEND_STACK="$PROJECT_NAME-backend"
 FRONTEND_STACK="$PROJECT_NAME-frontend"
-AUTH_STACK="$PROJECT_NAME-auth"
-AI_STACK="$PROJECT_NAME-ai"
+# Cognito, the weekly report and the agenda parser are Terraform now (infra/*.tf, state in HCP
+# Terraform); their values are read with tf_output. The network, API, database and site are
+# still CloudFormation stacks.
+TF_DIR="infra"
 # CloudFront only accepts certificates from us-east-1.
 CERT_STACK="$PROJECT_NAME-certificate"
 CERT_REGION="us-east-1"
@@ -26,6 +28,12 @@ STACK_TAGS=("$TAG_KEY=$PROJECT_NAME")
 output() {
   aws cloudformation describe-stacks --stack-name "$1" --region "${3:-$AWS_REGION}" \
     --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text
+}
+
+# tf_output NAME: prints one Terraform output (`terraform output -raw`). Needs `terraform login`
+# and `terraform init` in infra/ once. Nothing is applied here: applies run in HCP Terraform.
+tf_output() {
+  terraform -chdir="$TF_DIR" output -raw "$1"
 }
 
 # stack_exists STACK [REGION]
@@ -62,49 +70,23 @@ update_backend_cors() {
     --parameter-overrides "CorsOrigins=$origins" \
     --tags "${STACK_TAGS[@]}" \
     --no-fail-on-empty-changeset
-  # The agenda parser's function URL has its own CORS list.
-  if stack_exists "$AI_STACK"; then
-    aws cloudformation deploy \
-      --stack-name "$AI_STACK" \
-      --template-file infra/ai.yml \
-      --capabilities CAPABILITY_IAM \
-      --parameter-overrides "CorsOrigins=$origins" \
-      --tags "${STACK_TAGS[@]}" \
-      --no-fail-on-empty-changeset
-  fi
+  # The agenda parser's CORS list and Cognito's redirect URLs are Terraform's job: see
+  # update_auth_urls.
 }
 
-# app_urls: the origins the frontend runs on (local dev servers, CloudFront, custom domain);
-# Cognito only redirects back (OAuth, e.g. Google) to <origin>/login for these.
-app_urls() {
-  local urls="http://localhost:5173,http://localhost:3000" url
-  if stack_exists "$FRONTEND_STACK"; then
-    for url in "$(output "$FRONTEND_STACK" AppUrl)" "$(output "$FRONTEND_STACK" CustomDomainUrl)"; do
-      [ -n "$url" ] && [ "$url" != "None" ] && urls="$urls,$url"
-    done
-  fi
-  echo "$urls"
-}
-
-# update_auth_urls: points the Cognito app client's redirect URLs at the current frontend
-# addresses. Every other auth parameter (including the Google client) keeps its value.
+# update_auth_urls: Cognito's redirect URLs and the parser's CORS origins are Terraform now.
+# They are computed from the frontend stack's outputs, so a new Terraform run picks up a new
+# CloudFront address or custom domain. Nothing is applied from here.
 update_auth_urls() {
-  stack_exists "$AUTH_STACK" || return 0
-  local urls
-  urls="$(app_urls)"
-  echo "    App URLs: $urls"
-  aws cloudformation deploy \
-    --stack-name "$AUTH_STACK" \
-    --template-file infra/auth.yaml \
-    --parameter-overrides "AppUrls=$urls" \
-    --tags "${STACK_TAGS[@]}" \
-    --no-fail-on-empty-changeset
+  echo "    Cognito redirect URLs and the parser's CORS list follow the frontend stack:"
+  echo "    start a run in HCP Terraform (workspace UI: New run) so they pick up the change."
 }
 
-# require_auth_stack: exits with a hint when Cognito has not been deployed yet.
+# require_auth_stack: exits with a hint when Terraform's outputs are not available.
 require_auth_stack() {
-  stack_exists "$AUTH_STACK" || {
-    echo "Stack $AUTH_STACK not found; run make deploy-auth first." >&2
+  tf_output user_pool_id >/dev/null 2>&1 || {
+    echo "Terraform outputs not available. Once: terraform login, then make infra-init;" >&2
+    echo "and the HCP Terraform workspace must have been applied at least once." >&2
     exit 1
   }
 }

@@ -7,8 +7,8 @@ s ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help env build up down restart logs ps migrate migration seed psql test lint format \
-	dev-backend dev-frontend install clean deploy deploy-auth deploy-backend deploy-frontend destroy-auth destroy-backend destroy-frontend add-domain remove-domain infra-lint deploy-reports report-now \
-	llm-hello parse deploy-ai destroy-ai
+	dev-backend dev-frontend install clean deploy deploy-backend deploy-frontend destroy-backend destroy-frontend add-domain remove-domain infra-lint report-now \
+	llm-hello parse infra-init infra-plan infra-fmt infra-validate sync-env
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(firstword $(MAKEFILE_LIST)) | \
@@ -86,10 +86,7 @@ AWS_ENV := AWS_ACCESS_KEY_ID="$(AWS_ACCESS_KEY_ID)" AWS_SECRET_ACCESS_KEY="$(AWS
 	PARSER_MODEL="$(or $(PARSER_MODEL),anthropic.claude-opus-5-5)" PARSER_EFFORT="$(or $(PARSER_EFFORT),low)" \
 	PARSER_API="$(or $(PARSER_API),messages)" BUDGET_EMAIL="$(BUDGET_EMAIL)"
 
-deploy: deploy-backend deploy-frontend ## Deploy the whole app to AWS (after make deploy-auth)
-
-deploy-reports: env ## Deploy the weekly report: S3, SQS, Scheduler, builder + mailer Lambdas, SES (after deploy-backend)
-	@$(AWS_ENV) ./infra/deploy-reports.sh
+deploy: deploy-backend deploy-frontend ## Deploy the whole app to AWS (after the Terraform workspace was applied, see infra/README.md)
 
 report-now: env ## Build a report now: make report-now WEEK=2026-W39 (default: previous week)
 	@$(AWS_ENV) ./infra/report-now.sh
@@ -101,12 +98,6 @@ LLM_ENV := AWS_ACCESS_KEY_ID="$(AWS_ACCESS_KEY_ID)" AWS_SECRET_ACCESS_KEY="$(AWS
 	PARSER_MODEL="$(or $(PARSER_MODEL),anthropic.claude-opus-5-5)" PARSER_EFFORT="$(or $(PARSER_EFFORT),low)" \
 	PARSER_API="$(or $(PARSER_API),messages)"
 
-deploy-ai: env ## Deploy "Paste an agenda": parser Lambda + function URL + $5 budget alarm (after deploy-backend)
-	@$(AWS_ENV) ./infra/deploy-ai.sh
-
-destroy-ai: env ## Delete the parser stack
-	@$(AWS_ENV) ./infra/destroy-ai.sh
-
 llm-hello: env ## First call to Claude on Bedrock from your laptop (uses AWS_* and PARSER_MODEL from .env)
 	@cd backend && $(LLM_ENV) uv run python -m app.ai.hello
 
@@ -114,8 +105,24 @@ parse: env ## Run the agenda parser locally: make parse TEXT="Пн 10:00, син
 	@test -n "$(TEXT)" || (echo 'Usage: make parse TEXT="..."' && exit 1)
 	@cd backend && $(LLM_ENV) uv run python -m app.ai.agenda "$(TEXT)"
 
-deploy-auth: env ## Deploy Cognito (user pool + app client), print its settings and write them to .env
-	@$(AWS_ENV) ./infra/deploy-auth.sh
+# Cognito, the weekly report and the agenda parser are Terraform (infra/*.tf, state in HCP
+# Terraform). There is no apply target on purpose: infrastructure is applied only by HCP
+# Terraform, after a merge to main. `terraform apply` from a laptop is for emergencies.
+infra-init: ## terraform init (once, after `terraform login`)
+	terraform -chdir=infra init
+
+infra-fmt: ## Format the Terraform files
+	terraform -chdir=infra fmt
+
+infra-validate: ## Check the Terraform syntax, types and references (touches nothing in the cloud)
+	terraform -chdir=infra init -backend=false -input=false
+	terraform -chdir=infra validate
+
+infra-plan: ## Plan the infrastructure (runs in HCP Terraform; nothing is changed)
+	terraform -chdir=infra plan
+
+sync-env: ## Write the Cognito settings from the Terraform outputs to .env
+	@$(AWS_ENV) ./infra/sync-env.sh
 
 deploy-backend: env ## Deploy backend (Lambda) + database (Aurora Serverless) to AWS, see infra/
 	@$(AWS_ENV) ./infra/deploy-backend.sh
@@ -129,14 +136,12 @@ add-domain: env ## Attach DOMAIN_NAME from .env to the deployed frontend
 remove-domain: env ## Detach the custom domain and delete its certificate
 	@$(AWS_ENV) ./infra/remove-domain.sh
 
-destroy-auth: env ## Delete the Cognito stack (the user pool and its accounts are kept)
-	@$(AWS_ENV) ./infra/destroy-auth.sh
-
 destroy-backend: env ## Delete the AWS backend stacks (keeps a final DB snapshot)
 	@$(AWS_ENV) ./infra/destroy-backend.sh
 
 destroy-frontend: env ## Delete the S3 bucket, CloudFront distribution and domain certificate
 	@$(AWS_ENV) ./infra/destroy-frontend.sh
 
-infra-lint: ## Lint the CloudFormation templates
-	uvx cfn-lint infra/*.yaml infra/*.yml
+infra-lint: ## Lint the remaining CloudFormation templates and check the Terraform formatting
+	uvx cfn-lint infra/*.yaml
+	terraform -chdir=infra fmt -check
