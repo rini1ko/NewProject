@@ -12,18 +12,17 @@ main() {
   stack_exists "$BACKEND_STACK" || { echo "Stack $BACKEND_STACK not found; run make deploy-backend first." >&2; exit 1; }
   require_auth_stack
   api_base_url="$(output "$BACKEND_STACK" ApiBaseUrl)"
-  # "Paste an agenda" calls the parser Lambda directly; empty (feature off) until make deploy-ai.
-  parser_url=""
-  if stack_exists "$AI_STACK"; then parser_url="$(output "$AI_STACK" ParseUrl)"; fi
+  # "Paste an agenda" calls the parser Lambda directly (a Terraform output).
+  parser_url="$(tf_output parse_url 2>/dev/null || true)"
 
-  echo "==> [1/6] Build the frontend (API: $api_base_url, parser: ${parser_url:-NOT SET})"
+  echo "==> [1/6] Build the frontend (API: $api_base_url)"
   (cd frontend && npm ci && \
     VITE_API_URL="$api_base_url" \
     VITE_PARSER_URL="$parser_url" \
-    COGNITO_USER_POOL_ID="$(output "$AUTH_STACK" UserPoolId)" \
-    COGNITO_CLIENT_ID="$(output "$AUTH_STACK" UserPoolClientId)" \
-    COGNITO_DOMAIN="$(output "$AUTH_STACK" Domain)" \
-    COGNITO_GOOGLE_ENABLED="$(output "$AUTH_STACK" GoogleEnabled)" \
+    COGNITO_USER_POOL_ID="$(tf_output user_pool_id)" \
+    COGNITO_CLIENT_ID="$(tf_output user_pool_client_id)" \
+    COGNITO_DOMAIN="$(tf_output cognito_domain)" \
+    COGNITO_GOOGLE_ENABLED="$(tf_output google_enabled)" \
     npm run build)
 
   echo "==> [2/6] S3 bucket + CloudFront ($FRONTEND_STACK)"
@@ -42,7 +41,7 @@ main() {
   echo "==> [3/6] Allow the frontend to call the API ($BACKEND_STACK)"
   update_backend_cors
 
-  echo "==> [4/6] Allow Cognito to redirect back to the frontend ($AUTH_STACK)"
+  echo "==> [4/6] Cognito redirect URLs and the parser's CORS (Terraform)"
   update_auth_urls
 
   echo "==> [5/6] Upload to s3://$bucket"
