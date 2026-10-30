@@ -1,0 +1,10 @@
+.git/
+.env
+*.zip
+**/node_modules/
+**/.venv/
+**/.terraform/
+frontend/
+backend/
+docs/
+infra/bootstrap/
