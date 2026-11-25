@@ -1,0 +1,38 @@
+# The Cloud Run image, run locally the way Cloud Run runs it, next to a local PostgreSQL.
+#
+#   docker compose --env-file .env -f gcp/local/docker-compose.yml up --build -d
+#   curl http://localhost:8000/api/health        -> {"status":"ok"}  (it runs SELECT 1 in Postgres)
+#
+# --env-file .env only fills in ${COGNITO_...} below; no AWS keys go into the container.
+# The API listens on 8080 INSIDE the container (PORT=8080, as on Cloud Run) and is published on
+# host port 8000, so the Vite dev server's default proxy (localhost:8000) finds it.
+# If `make up` is running, stop it first (`make down`): it uses port 8000 too.
+name: spry-cloudrun-local
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: meetings
+      POSTGRES_PASSWORD: meetings
+      POSTGRES_DB: meetings
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meetings"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.cloudrun
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgresql+asyncpg://meetings:meetings@db:5432/meetings
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - "${HOST_PORT:-8000}:8080"
+    depends_on:
+      db:
+        condition: service_healthy

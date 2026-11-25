@@ -1,0 +1,27 @@
+# The same API as backend/Dockerfile, packaged for Google Cloud Run.
+#
+# Difference from the Lambda image: no Lambda Web Adapter layer. Cloud Run starts the container
+# and sends plain HTTP to the port in the PORT environment variable (8080), so the unchanged
+# uvicorn app is all that is needed. The same image runs on your laptop: see gcp/local/.
+FROM python:3.14-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-install-project
+
+COPY . .
+
+EXPOSE 8080
+# Migrations run at start: fine for one small service. With many instances, run them as a
+# separate Cloud Run job instead, so that two instances never migrate at the same time.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
